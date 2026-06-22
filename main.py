@@ -147,11 +147,74 @@ NOTAS:
 CONTRATO:
 """
 
+ANALYSIS_PROMPT_USA = """You are a senior attorney specializing in US contract law, with expertise across all 50 states and federal law (UCC, FLSA, ADA, FCRA, etc.). You apply the governing law specified in the contract; if no governing law is stated, you analyze under general US common law principles while noting any significant state-by-state variations that may apply.
 
-def analyze_contract(text: str, api_key: str) -> dict:
+Analyze the following contract and return ONLY a valid JSON object with this exact structure:
+
+{
+  "tipo_contrato": "string (e.g.: Service Agreement, NDA, Lease Agreement, Employment Contract)",
+  "nivel_riesgo": "LOW | MEDIUM | HIGH",
+  "puntuacion_riesgo": number (0-100),
+  "resumen_ejecutivo": "string (3-5 sentences summarizing the most important aspects of the contract)",
+  "partes": [
+    {
+      "nombre": "string",
+      "tipo": "Individual | Corporation | LLC | Partnership",
+      "rol": "string (e.g.: Service Provider, Client, Landlord, Employer...)",
+      "cif_nif": "string or null (EIN, SSN last 4, or null)"
+    }
+  ],
+  "objeto": "string (clear description of what the contract governs)",
+  "condiciones_economicas": {
+    "precio_total": "string",
+    "moneda": "USD",
+    "forma_pago": "string",
+    "penalizaciones": "string or null",
+    "garantias": "string or null"
+  },
+  "fechas_clave": [
+    {
+      "tipo": "string (e.g.: Effective Date, Expiration, Payment Due, Notice Period)",
+      "fecha": "string",
+      "descripcion": "string"
+    }
+  ],
+  "clausulas_riesgo": [
+    {
+      "titulo": "string (short clause name)",
+      "nivel": "HIGH | MEDIUM | LOW",
+      "descripcion": "string (what the problematic clause says)",
+      "impacto": "string (what can happen if applied)",
+      "recomendacion": "string (what to do about it)"
+    }
+  ],
+  "obligaciones_principales": [
+    {
+      "parte": "string (party name)",
+      "obligacion": "string"
+    }
+  ],
+  "jurisdiccion": "string or null (state/federal jurisdiction)",
+  "ley_aplicable": "string or null (governing law clause)",
+  "alertas": ["string"]
+}
+
+NOTES:
+- clausulas_riesgo: identify ALL clauses that may be unfavorable, ambiguous, or dangerous — pay special attention to: non-compete clauses (enforceability varies by state), arbitration clauses (FAA vs state rules), limitation of liability caps, indemnification, auto-renewal terms, IP ownership, at-will employment provisions, and choice-of-law clauses. Apply the governing law stated in the contract; if none, apply the most relevant state law based on parties and context.
+- alertas: list important warnings the attorney must urgently review — flag any clauses that may conflict with federal law (UCC, FLSA, ADA, etc.) or applicable state law
+- If any data is not in the contract, use null or []
+- Respond ONLY with the JSON, no markdown, no extra text
+
+CONTRACT:
+"""
+
+
+def analyze_contract(text: str, api_key: str, jurisdiction: str = "es") -> dict:
     client = anthropic.Anthropic(api_key=api_key)
     # Truncate to avoid token limits while keeping meaningful content
     contract_text = text[:10000] if len(text) > 10000 else text
+
+    prompt = ANALYSIS_PROMPT_USA if jurisdiction == "us" else ANALYSIS_PROMPT
 
     message = client.messages.create(
         model="claude-opus-4-8",
@@ -159,7 +222,7 @@ def analyze_contract(text: str, api_key: str) -> dict:
         messages=[
             {
                 "role": "user",
-                "content": ANALYSIS_PROMPT + contract_text,
+                "content": prompt + contract_text,
             }
         ],
     )
@@ -184,6 +247,7 @@ def health():
 async def upload_contract(
     file: UploadFile = File(...),
     api_key: str = Form(""),
+    jurisdiction: str = Form("es"),
 ):
     # Validate
     ext = Path(file.filename).suffix.lower()
@@ -221,7 +285,7 @@ async def upload_contract(
     # Analyze with Claude if API key provided
     if api_key.strip():
         try:
-            analysis = analyze_contract(raw_text, api_key.strip())
+            analysis = analyze_contract(raw_text, api_key.strip(), jurisdiction)
             conn = get_db()
             conn.execute(
                 "UPDATE contracts SET status=?, analysis=? WHERE id=?",
@@ -370,9 +434,13 @@ Cláusulas de riesgo: {len(a.get('clausulas_riesgo', []))}
 Alertas: {'; '.join(a.get('alertas', []))}
 """
 
-    system = f"""Eres un abogado senior especializado en derecho español y europeo (Civil, Mercantil, Laboral).
-Tienes acceso al contrato y su análisis previo. Responde de forma clara, directa y práctica en español.
-Si algo requiere consulta presencial con un abogado colegiado, indícalo.
+    jur = payload.get("jurisdiction", "es")
+    if jur == "us":
+        system_intro = "You are a senior US attorney with expertise across all 50 states and federal law. You have access to the contract and its prior analysis. Respond clearly, directly, and practically in English. If something requires in-person consultation with a licensed attorney, say so."
+    else:
+        system_intro = "Eres un abogado senior especializado en derecho español y europeo (Civil, Mercantil, Laboral). Tienes acceso al contrato y su análisis previo. Responde de forma clara, directa y práctica en español. Si algo requiere consulta presencial con un abogado colegiado, indícalo."
+
+    system = f"""{system_intro}
 
 CONTRATO:
 {contract_text}
