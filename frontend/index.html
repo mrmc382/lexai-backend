@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexAI — Análisis Inteligente de Contratos</title>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#3b82f6" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="LexAI" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+    }
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --sidebar: #0f172a;
+      --sidebar-hover: #1e293b;
+      --primary: #3b82f6;
+      --primary-dark: #2563eb;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --red: #ef4444;
+      --red-bg: #fef2f2;
+      --amber: #f59e0b;
+      --amber-bg: #fffbeb;
+      --green: #10b981;
+      --green-bg: #ecfdf5;
+      --blue-bg: #eff6ff;
+      --sidebar-width: 240px;
+      --topbar-height: 56px;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+
+    /* Sidebar */
+    .sidebar { position: fixed; top: 0; left: 0; width: var(--sidebar-width); height: 100vh; background: var(--sidebar); display: flex; flex-direction: column; overflow-y: auto; z-index: 100; }
+    .sidebar-logo { padding: 24px 20px 20px; border-bottom: 1px solid #1e293b; }
+    .sidebar-logo .logo-title { font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+    .sidebar-logo .logo-title span { color: var(--primary); }
+    .sidebar-logo .logo-sub { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 2px; }
+    .sidebar-nav { flex: 1; padding: 12px 8px; }
+    .nav-section { font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: 1.5px; padding: 16px 12px 6px; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; cursor: pointer; color: #94a3b8; font-size: 14px; font-weight: 500; transition: all 0.15s; margin-bottom: 2px; border: none; background: none; width: 100%; text-align: left; }
+    .nav-item:hover { background: var(--sidebar-hover); color: #e2e8f0; }
+    .nav-item.active { background: var(--primary); color: #fff; }
+    .nav-item svg { flex-shrink: 0; }
+    .sidebar-footer { padding: 16px 8px; border-top: 1px solid #1e293b; }
+
+    /* Main */
+    .main { margin-left: var(--sidebar-width); display: flex; flex-direction: column; min-height: 100vh; }
+    .topbar { position: sticky; top: 0; background: var(--card); border-bottom: 1px solid var(--border); padding: 0 24px; height: var(--topbar-height); display: flex; align-items: center; justify-content: space-between; z-index: 50; }
+    .topbar-title { font-size: 16px; font-weight: 600; color: var(--text); }
+    .topbar-actions { display: flex; gap: 10px; align-items: center; }
+    .content { flex: 1; padding: 24px; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-success { background: var(--green-bg); color: #065f46; border: 1px solid #a7f3d0; }
+    .btn-success:hover { background: #a7f3d0; }
+    .btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid #fecaca; }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Cards */
+    .card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 20px; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .card-title { font-size: 15px; font-weight: 600; color: var(--text); }
+
+    /* Stats */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 18px 20px; }
+    .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-value { font-size: 28px; font-weight: 700; color: var(--text); margin-top: 4px; }
+
+    /* Risk badges */
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .badge-alto { background: var(--red-bg); color: var(--red); border: 1px solid #fecaca; }
+    .badge-medio { background: var(--amber-bg); color: #d97706; border: 1px solid #fde68a; }
+    .badge-bajo { background: var(--green-bg); color: var(--green); border: 1px solid #a7f3d0; }
+    .badge-pending { background: var(--blue-bg); color: var(--primary); border: 1px solid #bfdbfe; }
+    .badge-error { background: var(--red-bg); color: var(--red); border: 1px solid #fecaca; }
+
+    /* Contract list */
+    .contract-list { display: flex; flex-direction: column; gap: 10px; }
+    .contract-item { background: var(--card); border-radius: 10px; border: 1px solid var(--border); padding: 14px 18px; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: all 0.15s; }
+    .contract-item:hover { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.08); }
+    .contract-item.selected { border-color: var(--primary); background: var(--blue-bg); }
+    .contract-icon { width: 36px; height: 36px; border-radius: 8px; background: #eff6ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .contract-info { flex: 1; min-width: 0; }
+    .contract-name { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .contract-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Search & filter bar */
+    .search-bar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; }
+    .search-input { flex: 1; padding: 9px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; color: var(--text); background: var(--card); outline: none; }
+    .search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .filter-btn { padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--card); color: var(--text-muted); transition: all 0.15s; }
+    .filter-btn.active-all { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .filter-btn.active-alto { background: var(--red-bg); color: var(--red); border-color: #fecaca; }
+    .filter-btn.active-medio { background: var(--amber-bg); color: #d97706; border-color: #fde68a; }
+    .filter-btn.active-bajo { background: var(--green-bg); color: var(--green); border-color: #a7f3d0; }
+
+    /* Upload zone */
+    .upload-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 48px 24px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--card); }
+    .upload-zone:hover, .upload-zone.drag-over { border-color: var(--primary); background: var(--blue-bg); }
+    .upload-zone .upload-icon { font-size: 48px; margin-bottom: 12px; }
+    .upload-zone h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .upload-zone p { font-size: 13px; color: var(--text-muted); }
+    input[type="file"] { display: none; }
+
+    /* Progress steps */
+    .progress-steps { display: flex; gap: 8px; margin-top: 16px; justify-content: center; }
+    .progress-step { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: 20px; }
+    .progress-step.done { background: var(--green-bg); color: var(--green); }
+    .progress-step.active { background: var(--blue-bg); color: var(--primary); }
+    .progress-step.pending { background: var(--bg); color: var(--text-muted); }
+
+    /* Analysis view */
+    .analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .analysis-section { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 18px; }
+    .analysis-section.full { grid-column: 1 / -1; }
+    .section-title { font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+    .data-row { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .data-row:last-child { border-bottom: none; }
+    .data-label { color: var(--text-muted); font-weight: 500; min-width: 130px; flex-shrink: 0; }
+    .data-value { color: var(--text); }
+
+    /* Risk clauses */
+    .risk-clause { border-radius: 10px; padding: 14px; margin-bottom: 10px; border: 1px solid; }
+    .risk-clause.alto { background: var(--red-bg); border-color: #fecaca; }
+    .risk-clause.medio { background: var(--amber-bg); border-color: #fde68a; }
+    .risk-clause.bajo { background: var(--green-bg); border-color: #a7f3d0; }
+    .risk-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .risk-clause.alto .risk-title { color: #b91c1c; }
+    .risk-clause.medio .risk-title { color: #92400e; }
+    .risk-clause.bajo .risk-title { color: #065f46; }
+    .risk-desc { font-size: 12px; color: var(--text); margin-bottom: 6px; line-height: 1.5; }
+    .risk-rec { font-size: 12px; font-style: italic; color: var(--text-muted); }
+
+    /* Party card */
+    .party-card { background: var(--bg); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+    .party-name { font-size: 14px; font-weight: 600; color: var(--text); }
+    .party-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Alert */
+    .alert { border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; font-size: 13px; display: flex; gap: 8px; align-items: flex-start; }
+    .alert-danger { background: var(--red-bg); color: #b91c1c; border: 1px solid #fecaca; }
+    .alert-info { background: var(--blue-bg); color: #1d4ed8; border: 1px solid #bfdbfe; }
+
+    /* Chat */
+    .chat-messages { max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; padding: 4px 0; }
+    .chat-bubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.6; max-width: 85%; }
+    .chat-bubble.user { background: var(--primary); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+    .chat-bubble.assistant { background: var(--bg); color: var(--text); align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid var(--border); }
+    .chat-input-row { display: flex; gap: 8px; }
+    .chat-input { flex: 1; padding: 9px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; color: var(--text); background: var(--bg); outline: none; resize: none; font-family: inherit; }
+    .chat-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .chat-empty { text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px; }
+
+    /* Settings */
+    .form-group { margin-bottom: 20px; }
+    .form-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; display: block; }
+    .form-hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .form-input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; color: var(--text); background: var(--bg); outline: none; font-family: monospace; }
+    .form-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+
+    /* Score ring */
+    .score-ring { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
+    .score-ring svg { transform: rotate(-90deg); }
+    .score-center { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; }
+
+    /* Misc */
+    .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    .spinner-dark { border-color: rgba(0,0,0,0.15); border-top-color: var(--primary); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--text-muted); }
+    .empty-state h3 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; margin-top: 16px; }
+    .text-muted { color: var(--text-muted); }
+    .text-sm { font-size: 13px; }
+    .toast { position: fixed; bottom: 24px; right: 24px; background: #1e293b; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; font-weight: 500; z-index: 1000; box-shadow: 0 10px 40px rgba(0,0,0,0.2); animation: slideUp 0.3s; }
+    .toast.error { background: var(--red); }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Print styles */
+    @media print {
+      .sidebar, .topbar, .btn, .chat-input-row, .no-print { display: none !important; }
+      .main { margin-left: 0 !important; }
+      .content { padding: 0 !important; }
+      .analysis-grid { grid-template-columns: 1fr !important; }
+      .analysis-section { break-inside: avoid; border: 1px solid #ccc !important; margin-bottom: 12px; }
+      body { background: white; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+const API = 'http://localhost:8000/api';
+
+// ── Icons ─────────────────────────────────────────────────────────────────────
+const Icon = ({ name, size = 16, color = 'currentColor' }) => {
+  const icons = {
+    dashboard: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
+    upload: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+    file: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+    settings: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
+    trash: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>,
+    refresh: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>,
+    alert: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+    check: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>,
+    chevron: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>,
+    info: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+    key: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
+    list: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
+    print: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>,
+    chat: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
+    search: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+    send: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
+  };
+  return icons[name] || null;
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const riskColor = (nivel) => {
+  if (!nivel) return '#94a3b8';
+  const n = nivel.toUpperCase();
+  if (n === 'ALTO') return '#ef4444';
+  if (n === 'MEDIO') return '#f59e0b';
+  return '#10b981';
+};
+
+const RiskBadge = ({ nivel }) => {
+  if (!nivel) return <span className="badge badge-pending">Pendiente</span>;
+  const cls = nivel.toLowerCase();
+  return <span className={`badge badge-${cls}`}>{nivel}</span>;
+};
+
+const formatDate = (iso) => {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const formatSize = (bytes) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function Toast({ message, type, onClose }) {
+  useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, []);
+  return <div className={`toast ${type === 'error' ? 'error' : ''}`}>{message}</div>;
+}
+
+// ── Upload View ───────────────────────────────────────────────────────────────
+function UploadView({ apiKey, onUploaded, showToast }) {
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [step, setStep] = useState(0); // 0=idle, 1=uploading, 2=extracting, 3=analyzing
+  const inputRef = useRef();
+
+  const steps = ['Subiendo archivo', 'Extrayendo texto', 'Analizando con IA'];
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    if (!file.name.match(/\.(pdf|docx)$/i)) {
+      showToast('Solo se aceptan archivos PDF o DOCX', 'error');
+      return;
+    }
+    setUploading(true);
+    setStep(1);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('api_key', apiKey || '');
+    try {
+      setTimeout(() => setStep(2), 800);
+      if (apiKey) setTimeout(() => setStep(3), 2000);
+      const res = await fetch(`${API}/contracts/upload`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error desconocido');
+      showToast(apiKey ? '✓ Contrato analizado correctamente' : '✓ Documento subido. Añade tu API key para analizar.');
+      onUploaded(data.id);
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      setUploading(false);
+      setStep(0);
+    }
+  };
+
+  return (
+    <div>
+      <h2 style={{fontSize:18,fontWeight:700,marginBottom:20}}>Subir Contrato</h2>
+      <label
+        className={`upload-zone ${dragging ? 'drag-over' : ''}`}
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]); }}
+        onClick={() => !uploading && inputRef.current.click()}
+        style={{cursor: uploading ? 'default' : 'pointer'}}
+      >
+        <input ref={inputRef} type="file" accept=".pdf,.docx" onChange={e => handleFile(e.target.files[0])} />
+        {uploading ? (
+          <>
+            <div style={{display:'flex',justifyContent:'center',marginBottom:16}}>
+              <div style={{width:48,height:48,border:'4px solid #e2e8f0',borderTopColor:'#3b82f6',borderRadius:'50%',animation:'spin 0.6s linear infinite'}} />
+            </div>
+            <h3>Procesando...</h3>
+            <div className="progress-steps" style={{marginTop:16}}>
+              {steps.map((s, i) => (
+                <div key={i} className={`progress-step ${i+1 < step ? 'done' : i+1 === step ? 'active' : 'pending'}`}>
+                  {i+1 < step ? '✓' : i+1 === step ? <div style={{width:10,height:10,borderRadius:'50%',border:'2px solid currentColor',borderTopColor:'transparent',animation:'spin 0.6s linear infinite'}} /> : '○'}
+                  {s}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="upload-icon">📄</div>
+            <h3>Arrastra tu contrato aquí</h3>
+            <p>o haz clic para seleccionar · PDF o DOCX · hasta 10MB</p>
+            <p style={{fontSize:12,color:'#94a3b8',marginTop:6}}>También funciona con PDFs escaneados</p>
+            {!apiKey && (
+              <div style={{marginTop:16,padding:'8px 16px',background:'#fffbeb',borderRadius:8,border:'1px solid #fde68a',fontSize:13,color:'#92400e',display:'inline-block'}}>
+                ⚠️ Sin API Key: el documento se subirá pero no se analizará con IA
+              </div>
+            )}
+          </>
+        )}
+      </label>
+
+      <div className="card" style={{marginTop:20}}>
+        <div className="section-title"><Icon name="info" /> ¿Qué analiza LexAI?</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:8}}>
+          {[
+            ['🏢','Partes del contrato','Identifica todas las personas y empresas involucradas'],
+            ['⚠️','Cláusulas de riesgo','Detecta cláusulas problemáticas con nivel ALTO/MEDIO/BAJO'],
+            ['💰','Condiciones económicas','Precio, forma de pago, penalizaciones y garantías'],
+            ['📅','Fechas clave','Firma, vigencia, vencimiento y plazos de pago'],
+            ['💬','Chat con el contrato','Haz preguntas sobre el contrato y recibe respuestas legales'],
+            ['🔔','Alertas urgentes','Avisos que requieren revisión inmediata del abogado'],
+          ].map(([ico,title,desc]) => (
+            <div key={title} style={{display:'flex',gap:10,padding:12,background:'#f8fafc',borderRadius:8}}>
+              <span style={{fontSize:20}}>{ico}</span>
+              <div>
+                <div style={{fontSize:13,fontWeight:600,color:'#1e293b'}}>{title}</div>
+                <div style={{fontSize:12,color:'#64748b',marginTop:2}}>{desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Chat Component ────────────────────────────────────────────────────────────
+function ChatSection({ contractId, apiKey, showToast }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef();
+
+  const scrollToBottom = () => bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useEffect(scrollToBottom, [messages]);
+
+  const send = async () => {
+    const msg = input.trim();
+    if (!msg || loading) return;
+    if (!apiKey) { showToast('Añade tu API Key en Configuración para usar el chat', 'error'); return; }
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: msg }]);
+    setLoading(true);
+    try {
+      const history = messages.map(m => ({ role: m.role, content: m.content }));
+      const res = await fetch(`${API}/contracts/${contractId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey, message: msg, history }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+      setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+    } catch (e) {
+      showToast(e.message, 'error');
+      setMessages(prev => prev.slice(0, -1));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const suggestions = [
+    '¿Cuáles son los riesgos más importantes para mí?',
+    '¿Puedo salir de este contrato anticipadamente?',
+    '¿Es abusiva alguna cláusula?',
+    '¿Qué pasa si no pago a tiempo?',
+  ];
+
+  return (
+    <div>
+      <div className="chat-messages">
+        {messages.length === 0 ? (
+          <div className="chat-empty">
+            <div style={{fontSize:32,marginBottom:8}}>💬</div>
+            <p style={{marginBottom:12}}>Pregunta cualquier cosa sobre este contrato</p>
+            <div style={{display:'flex',flexWrap:'wrap',gap:6,justifyContent:'center'}}>
+              {suggestions.map(s => (
+                <button key={s} onClick={() => setInput(s)} style={{padding:'5px 12px',borderRadius:20,border:'1px solid var(--border)',background:'var(--card)',fontSize:12,cursor:'pointer',color:'var(--text)',transition:'all 0.15s'}}
+                  onMouseEnter={e=>e.target.style.borderColor='var(--primary)'}
+                  onMouseLeave={e=>e.target.style.borderColor='var(--border)'}
+                >{s}</button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          messages.map((m, i) => (
+            <div key={i} className={`chat-bubble ${m.role}`}>
+              {m.content.split('\n').map((line, j) => <span key={j}>{line}{j < m.content.split('\n').length - 1 ? <br/> : null}</span>)}
+            </div>
+          ))
+        )}
+        {loading && (
+          <div className="chat-bubble assistant" style={{display:'flex',gap:4,alignItems:'center'}}>
+            <div style={{width:6,height:6,borderRadius:'50%',background:'var(--text-muted)',animation:'bounce 1s infinite'}} />
+            <div style={{width:6,height:6,borderRadius:'50%',background:'var(--text-muted)',animation:'bounce 1s 0.2s infinite'}} />
+            <div style={{width:6,height:6,borderRadius:'50%',background:'var(--text-muted)',animation:'bounce 1s 0.4s infinite'}} />
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+      <div className="chat-input-row">
+        <textarea
+          className="chat-input"
+          rows={2}
+          placeholder="Escribe tu pregunta sobre el contrato..."
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+        />
+        <button className="btn btn-primary" onClick={send} disabled={loading || !input.trim()} style={{alignSelf:'flex-end'}}>
+          <Icon name="send" size={14} />
+        </button>
+      </div>
+      <style>{`@keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }`}</style>
+    </div>
+  );
+}
+
+// ── Analysis View ─────────────────────────────────────────────────────────────
+function AnalysisView({ contract, apiKey, onDelete, onReanalyze, showToast }) {
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const a = contract.analysis;
+
+  const handleReanalyze = async () => {
+    if (!apiKey) { showToast('Añade tu API Key en Configuración primero', 'error'); return; }
+    setReanalyzing(true);
+    try {
+      const res = await fetch(`${API}/contracts/${contract.id}/reanalyze`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ api_key: apiKey })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+      showToast('✓ Contrato re-analizado');
+      onReanalyze(data);
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
+  const handleExportPDF = () => {
+    window.print();
+  };
+
+  const score = a?.puntuacion_riesgo || 0;
+  const circumference = 2 * Math.PI * 34;
+  const offset = circumference - (score / 100) * circumference;
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20,gap:16}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,color:'#64748b',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.5px'}}>Análisis de contrato</div>
+          <h2 style={{fontSize:18,fontWeight:700,wordBreak:'break-all'}}>{contract.filename}</h2>
+          <div style={{fontSize:12,color:'#64748b',marginTop:4}}>
+            Subido: {formatDate(contract.uploaded_at)} · {formatSize(contract.file_size)}
+          </div>
+        </div>
+        <div style={{display:'flex',gap:8,flexShrink:0}} className="no-print">
+          {a && (
+            <button className="btn btn-success btn-sm" onClick={handleExportPDF}>
+              <Icon name="print" size={14} />
+              Exportar PDF
+            </button>
+          )}
+          <button className="btn btn-secondary btn-sm" onClick={handleReanalyze} disabled={reanalyzing}>
+            {reanalyzing ? <span className="spinner spinner-dark" style={{width:14,height:14}} /> : <Icon name="refresh" size={14} />}
+            Re-analizar
+          </button>
+          <button className="btn btn-danger btn-sm" onClick={() => onDelete(contract.id)}>
+            <Icon name="trash" size={14} />
+          </button>
+        </div>
+      </div>
+
+      {!a && (
+        <div className="card">
+          <div style={{textAlign:'center',padding:32}}>
+            <div style={{fontSize:40,marginBottom:12}}>🔍</div>
+            <h3 style={{marginBottom:8}}>Sin análisis disponible</h3>
+            <p style={{color:'#64748b',fontSize:13,marginBottom:20}}>
+              {contract.status === 'error'
+                ? 'Hubo un error durante el análisis. Inténtalo de nuevo.'
+                : 'El documento fue subido pero no analizado. Añade tu API Key y re-analiza.'}
+            </p>
+            <button className="btn btn-primary" onClick={handleReanalyze} disabled={reanalyzing}>
+              {reanalyzing ? <span className="spinner" /> : <Icon name="key" />}
+              Analizar con IA
+            </button>
+          </div>
+        </div>
+      )}
+
+      {a && (
+        <>
+          {/* Summary banner */}
+          <div className="card" style={{marginBottom:16,background: score >= 70 ? '#fef2f2' : score >= 40 ? '#fffbeb' : '#ecfdf5', borderColor: riskColor(a.nivel_riesgo) + '40'}}>
+            <div style={{display:'flex',gap:20,alignItems:'center'}}>
+              <div className="score-ring">
+                <svg width="80" height="80" viewBox="0 0 80 80">
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                  <circle cx="40" cy="40" r="34" fill="none" stroke={riskColor(a.nivel_riesgo)} strokeWidth="8"
+                    strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" />
+                </svg>
+                <div className="score-center" style={{color: riskColor(a.nivel_riesgo)}}>{score}</div>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                  <span style={{fontSize:16,fontWeight:700}}>{a.tipo_contrato}</span>
+                  <RiskBadge nivel={a.nivel_riesgo} />
+                </div>
+                <p style={{fontSize:13,color:'#374151',lineHeight:1.6}}>{a.resumen_ejecutivo}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Alerts */}
+          {a.alertas?.length > 0 && (
+            <div style={{marginBottom:16}}>
+              {a.alertas.map((al, i) => (
+                <div key={i} className="alert alert-danger">
+                  <Icon name="alert" size={16} color="#b91c1c" />
+                  <span>{al}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="analysis-grid">
+            {/* Parties */}
+            <div className="analysis-section">
+              <div className="section-title">👥 Partes</div>
+              {a.partes?.map((p, i) => (
+                <div key={i} className="party-card">
+                  <div className="party-name">{p.nombre}</div>
+                  <div className="party-meta">{p.rol} · {p.tipo}</div>
+                  {p.cif_nif && <div className="party-meta">NIF/CIF: {p.cif_nif}</div>}
+                </div>
+              ))}
+            </div>
+
+            {/* Economic conditions */}
+            <div className="analysis-section">
+              <div className="section-title">💰 Condiciones Económicas</div>
+              {a.condiciones_economicas && Object.entries({
+                'Precio total': a.condiciones_economicas.precio_total,
+                'Moneda': a.condiciones_economicas.moneda,
+                'Forma de pago': a.condiciones_economicas.forma_pago,
+                'Penalizaciones': a.condiciones_economicas.penalizaciones,
+                'Garantías': a.condiciones_economicas.garantias,
+              }).filter(([,v]) => v && v !== 'null').map(([k, v]) => (
+                <div key={k} className="data-row">
+                  <span className="data-label">{k}</span>
+                  <span className="data-value">{v}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Key dates */}
+            <div className="analysis-section">
+              <div className="section-title">📅 Fechas Clave</div>
+              {!a.fechas_clave?.length && <p className="text-muted text-sm">No se identificaron fechas</p>}
+              {a.fechas_clave?.map((f, i) => (
+                <div key={i} className="data-row">
+                  <span className="data-label">{f.tipo}</span>
+                  <div>
+                    <span className="data-value" style={{fontWeight:600}}>{f.fecha}</span>
+                    {f.descripcion && <div style={{fontSize:11,color:'#64748b'}}>{f.descripcion}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Legal */}
+            <div className="analysis-section">
+              <div className="section-title">⚖️ Marco Legal</div>
+              <div className="data-row">
+                <span className="data-label">Objeto</span>
+                <span className="data-value">{a.objeto || '—'}</span>
+              </div>
+              <div className="data-row">
+                <span className="data-label">Jurisdicción</span>
+                <span className="data-value">{a.jurisdiccion || 'No especificada'}</span>
+              </div>
+              <div className="data-row">
+                <span className="data-label">Ley aplicable</span>
+                <span className="data-value">{a.ley_aplicable || 'No especificada'}</span>
+              </div>
+            </div>
+
+            {/* Risk Clauses */}
+            <div className="analysis-section full">
+              <div className="section-title">⚠️ Cláusulas de Riesgo</div>
+              {!a.clausulas_riesgo?.length && <p className="text-muted text-sm">No se detectaron cláusulas de riesgo</p>}
+              {a.clausulas_riesgo?.sort((x,y) => {
+                const order = {ALTO:0,MEDIO:1,BAJO:2};
+                return (order[x.nivel]||2) - (order[y.nivel]||2);
+              }).map((c, i) => (
+                <div key={i} className={`risk-clause ${c.nivel?.toLowerCase()}`}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                    <RiskBadge nivel={c.nivel} />
+                    <span className="risk-title">{c.titulo}</span>
+                  </div>
+                  <div className="risk-desc">{c.descripcion}</div>
+                  {c.impacto && <div className="risk-desc"><strong>Impacto:</strong> {c.impacto}</div>}
+                  {c.recomendacion && <div className="risk-rec">💡 {c.recomendacion}</div>}
+                </div>
+              ))}
+            </div>
+
+            {/* Obligations */}
+            {a.obligaciones_principales?.length > 0 && (
+              <div className="analysis-section full">
+                <div className="section-title">📋 Obligaciones Principales</div>
+                {a.obligaciones_principales.map((o, i) => (
+                  <div key={i} className="data-row">
+                    <span className="data-label" style={{fontWeight:600,color:'#1e293b'}}>{o.parte}</span>
+                    <span className="data-value">{o.obligacion}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Chat */}
+            <div className="analysis-section full no-print">
+              <div className="section-title"><Icon name="chat" size={13} /> Chat con el Contrato</div>
+              <ChatSection contractId={contract.id} apiKey={apiKey} showToast={showToast} />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Dashboard View ────────────────────────────────────────────────────────────
+function DashboardView({ contracts, onSelect }) {
+  const total = contracts.length;
+  const analyzed = contracts.filter(c => c.status === 'analyzed').length;
+  const altos = contracts.filter(c => c.nivel_riesgo === 'ALTO').length;
+  const medios = contracts.filter(c => c.nivel_riesgo === 'MEDIO').length;
+
+  return (
+    <div>
+      <h2 style={{fontSize:18,fontWeight:700,marginBottom:20}}>Dashboard</h2>
+      <div className="stats-grid">
+        {[
+          { label: 'Contratos totales', value: total, color: null },
+          { label: 'Analizados', value: analyzed, color: '#10b981' },
+          { label: 'Riesgo Alto', value: altos, color: '#ef4444' },
+          { label: 'Riesgo Medio', value: medios, color: '#f59e0b' },
+        ].map(s => (
+          <div key={s.label} className="stat-card">
+            <div className="stat-label">{s.label}</div>
+            <div className="stat-value" style={s.color ? {color:s.color} : {}}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">Contratos recientes</div>
+        </div>
+        {contracts.length === 0 ? (
+          <div className="empty-state">
+            <Icon name="file" size={48} color="#cbd5e1" />
+            <h3>Sin contratos</h3>
+            <p>Sube tu primer contrato para comenzar</p>
+          </div>
+        ) : (
+          <div className="contract-list">
+            {contracts.slice(0, 10).map(c => (
+              <div key={c.id} className="contract-item" onClick={() => onSelect(c.id)}>
+                <div className="contract-icon"><Icon name="file" size={18} color="#3b82f6" /></div>
+                <div className="contract-info">
+                  <div className="contract-name">{c.filename}</div>
+                  <div className="contract-meta">{c.tipo_contrato && `${c.tipo_contrato} · `}{formatDate(c.uploaded_at)}</div>
+                </div>
+                <RiskBadge nivel={c.nivel_riesgo} />
+                <Icon name="chevron" size={16} color="#94a3b8" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Contracts List View ───────────────────────────────────────────────────────
+function ContractsView({ contracts, selectedId, onSelect }) {
+  const [search, setSearch] = useState('');
+  const [riskFilter, setRiskFilter] = useState('TODOS');
+
+  const filtered = contracts.filter(c => {
+    const matchSearch = !search || c.filename.toLowerCase().includes(search.toLowerCase()) ||
+      (c.tipo_contrato || '').toLowerCase().includes(search.toLowerCase());
+    const matchRisk = riskFilter === 'TODOS' || c.nivel_riesgo === riskFilter || (!c.nivel_riesgo && riskFilter === 'PENDIENTE');
+    return matchSearch && matchRisk;
+  });
+
+  const filters = ['TODOS', 'ALTO', 'MEDIO', 'BAJO', 'PENDIENTE'];
+
+  return (
+    <div>
+      <h2 style={{fontSize:18,fontWeight:700,marginBottom:16}}>
+        Mis Contratos <span className="pill" style={{marginLeft:8}}>{contracts.length}</span>
+      </h2>
+
+      <div className="search-bar">
+        <div style={{position:'relative',flex:1}}>
+          <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',pointerEvents:'none'}}>
+            <Icon name="search" size={15} color="#94a3b8" />
+          </span>
+          <input
+            className="search-input"
+            style={{paddingLeft:34}}
+            placeholder="Buscar por nombre o tipo de contrato..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <div style={{display:'flex',gap:6}}>
+          {filters.map(f => (
+            <button key={f} className={`filter-btn ${riskFilter === f ? `active-${f.toLowerCase()}` : ''}`}
+              onClick={() => setRiskFilter(f)}>
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="empty-state">
+          <Icon name="search" size={48} color="#cbd5e1" />
+          <h3>{contracts.length === 0 ? 'Sin contratos' : 'Sin resultados'}</h3>
+          <p>{contracts.length === 0 ? 'Sube tu primer contrato usando el menú lateral' : 'Prueba con otro filtro o búsqueda'}</p>
+        </div>
+      ) : (
+        <div className="contract-list">
+          {filtered.map(c => (
+            <div key={c.id} className={`contract-item ${selectedId === c.id ? 'selected' : ''}`} onClick={() => onSelect(c.id)}>
+              <div className="contract-icon"><Icon name="file" size={18} color="#3b82f6" /></div>
+              <div className="contract-info">
+                <div className="contract-name">{c.filename}</div>
+                <div className="contract-meta">
+                  {c.tipo_contrato ? `${c.tipo_contrato} · ` : ''}{formatDate(c.uploaded_at)}{c.file_size ? ` · ${formatSize(c.file_size)}` : ''}
+                </div>
+              </div>
+              <RiskBadge nivel={c.nivel_riesgo} />
+              <Icon name="chevron" size={16} color="#94a3b8" />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Settings View ─────────────────────────────────────────────────────────────
+function SettingsView({ apiKey, onSave }) {
+  const [key, setKey] = useState(apiKey || '');
+  const [saved, setSaved] = useState(false);
+
+  const save = () => { onSave(key); setSaved(true); setTimeout(() => setSaved(false), 2000); };
+
+  return (
+    <div>
+      <h2 style={{fontSize:18,fontWeight:700,marginBottom:20}}>Configuración</h2>
+      <div className="card" style={{maxWidth:560}}>
+        <div className="section-title"><Icon name="key" /> API Key de Anthropic</div>
+        <div style={{marginTop:16}}>
+          <div className="form-group">
+            <label className="form-label">API Key</label>
+            <input className="form-input" type="password" placeholder="sk-ant-api03-..." value={key} onChange={e => setKey(e.target.value)} />
+            <div className="form-hint">
+              Obtén tu API Key en <a href="https://console.anthropic.com" target="_blank" style={{color:'#3b82f6'}}>console.anthropic.com</a>.
+              Se guarda solo en tu navegador (localStorage), nunca se envía a ningún servidor externo.
+            </div>
+          </div>
+          <button className="btn btn-primary" onClick={save}>
+            {saved ? <><Icon name="check" size={16} /> Guardado</> : 'Guardar API Key'}
+          </button>
+        </div>
+      </div>
+      <div className="card" style={{marginTop:16,maxWidth:560}}>
+        <div className="section-title"><Icon name="info" /> Sobre LexAI</div>
+        <div style={{fontSize:13,color:'#374151',lineHeight:2,marginTop:12}}>
+          <div><strong>Versión:</strong> 1.1.0</div>
+          <div><strong>Motor IA:</strong> Claude Opus (Anthropic)</div>
+          <div><strong>Formatos:</strong> PDF, DOCX (incluyendo PDFs escaneados con OCR)</div>
+          <div><strong>Base de datos:</strong> SQLite local (lexai.db)</div>
+          <div><strong>Almacenamiento:</strong> 100% local en tu máquina</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────────
+function App() {
+  const [view, setView] = useState('dashboard');
+  const [contracts, setContracts] = useState([]);
+  const [selectedContract, setSelectedContract] = useState(null);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('lexai_api_key') || '');
+  const [toast, setToast] = useState(null);
+
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ message, type, id: Date.now() });
+  }, []);
+
+  const loadContracts = async () => {
+    try {
+      const res = await fetch(`${API}/contracts`);
+      const data = await res.json();
+      setContracts(data);
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    loadContracts();
+    const interval = setInterval(loadContracts, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSaveApiKey = (key) => {
+    setApiKey(key);
+    localStorage.setItem('lexai_api_key', key);
+    showToast('✓ API Key guardada');
+  };
+
+  const handleUploaded = async (id) => {
+    await loadContracts();
+    const res = await fetch(`${API}/contracts/${id}`);
+    const data = await res.json();
+    setSelectedContract(data);
+    setView('analysis');
+  };
+
+  const handleSelect = async (id) => {
+    try {
+      const res = await fetch(`${API}/contracts/${id}`);
+      const data = await res.json();
+      setSelectedContract(data);
+      setView('analysis');
+    } catch(e) { showToast('Error cargando contrato', 'error'); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('¿Eliminar este contrato?')) return;
+    try {
+      await fetch(`${API}/contracts/${id}`, { method: 'DELETE' });
+      showToast('Contrato eliminado');
+      setView('contracts');
+      setSelectedContract(null);
+      await loadContracts();
+    } catch(e) { showToast('Error eliminando', 'error'); }
+  };
+
+  const handleReanalyze = (data) => { setSelectedContract(data); loadContracts(); };
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { id: 'upload', label: 'Subir Contrato', icon: 'upload' },
+    { id: 'contracts', label: 'Mis Contratos', icon: 'list' },
+  ];
+
+  const topbarTitles = { dashboard: 'Dashboard', upload: 'Subir Contrato', contracts: 'Mis Contratos', analysis: 'Análisis', settings: 'Configuración' };
+
+  const renderContent = () => {
+    if (view === 'dashboard') return <DashboardView contracts={contracts} onSelect={handleSelect} />;
+    if (view === 'upload') return <UploadView apiKey={apiKey} onUploaded={handleUploaded} showToast={showToast} />;
+    if (view === 'contracts') return <ContractsView contracts={contracts} selectedId={selectedContract?.id} onSelect={handleSelect} />;
+    if (view === 'analysis' && selectedContract) return (
+      <AnalysisView contract={selectedContract} apiKey={apiKey} onDelete={handleDelete} onReanalyze={handleReanalyze} showToast={showToast} />
+    );
+    if (view === 'settings') return <SettingsView apiKey={apiKey} onSave={handleSaveApiKey} />;
+    return null;
+  };
+
+  return (
+    <>
+      <div className="sidebar">
+        <div className="sidebar-logo">
+          <div className="logo-title">Lex<span>AI</span></div>
+          <div className="logo-sub">Análisis de Contratos</div>
+        </div>
+        <nav className="sidebar-nav">
+          <div className="nav-section">Principal</div>
+          {navItems.map(item => (
+            <button key={item.id} className={`nav-item ${view === item.id ? 'active' : ''}`} onClick={() => setView(item.id)}>
+              <Icon name={item.icon} size={16} />
+              {item.label}
+              {item.id === 'contracts' && contracts.length > 0 && (
+                <span style={{marginLeft:'auto',background:'rgba(255,255,255,0.15)',borderRadius:10,padding:'1px 7px',fontSize:11}}>
+                  {contracts.length}
+                </span>
+              )}
+            </button>
+          ))}
+          {selectedContract && (
+            <>
+              <div className="nav-section" style={{marginTop:8}}>Abierto</div>
+              <button className={`nav-item ${view === 'analysis' ? 'active' : ''}`} onClick={() => setView('analysis')}>
+                <Icon name="file" size={16} />
+                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  {selectedContract.filename?.split('.')[0]}
+                </span>
+              </button>
+            </>
+          )}
+        </nav>
+        <div className="sidebar-footer">
+          <button className={`nav-item ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')}>
+            <Icon name="settings" size={16} />
+            Configuración
+            {!apiKey && <span style={{marginLeft:'auto',width:8,height:8,borderRadius:'50%',background:'#ef4444'}} />}
+          </button>
+        </div>
+      </div>
+
+      <div className="main">
+        <div className="topbar">
+          <div className="topbar-title">{topbarTitles[view] || 'LexAI'}</div>
+          <div className="topbar-actions">
+            {!apiKey && (
+              <div style={{fontSize:12,color:'#d97706',display:'flex',alignItems:'center',gap:4}}>
+                <Icon name="alert" size={14} color="#d97706" /> Sin API Key
+              </div>
+            )}
+            <button className="btn btn-primary" onClick={() => setView('upload')}>
+              <Icon name="upload" size={14} />
+              Subir contrato
+            </button>
+          </div>
+        </div>
+        <div className="content">
+          {renderContent()}
+        </div>
+      </div>
+
+      {toast && <Toast key={toast.id} message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
