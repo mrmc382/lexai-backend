@@ -7,10 +7,12 @@ Abre: http://localhost:8000
 import json
 import os
 import secrets
-import sqlite3
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+
+import psycopg2
+import psycopg2.extras
 
 import anthropic
 import pdfplumber
@@ -32,18 +34,22 @@ app.add_middleware(
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
-DB_PATH = "lexai.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # ── Database ──────────────────────────────────────────────────────────────────
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL)
     return conn
+
+
+def get_cur(conn):
+    return conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
 
 def init_db():
     conn = get_db()
-    conn.execute("""
+    cur = get_cur(conn)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS contracts (
             id          TEXT PRIMARY KEY,
             filename    TEXT NOT NULL,
@@ -54,7 +60,7 @@ def init_db():
             analysis    TEXT
         )
     """)
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS trial_users (
             id            TEXT PRIMARY KEY,
             name          TEXT NOT NULL,
@@ -70,6 +76,7 @@ def init_db():
         )
     """)
     conn.commit()
+    cur.close()
     conn.close()
 
 
@@ -87,9 +94,10 @@ def _check_admin(request_secret: str):
 def _validate_trial_key(trial_key: str) -> str:
     """Valida un trial key y retorna la API key del servidor. Lanza HTTPException si no es válida."""
     conn = get_db()
-    user = conn.execute(
-        "SELECT * FROM trial_users WHERE trial_key=?", (trial_key,)
-    ).fetchone()
+    cur = get_cur(conn)
+    cur.execute("SELECT * FROM trial_users WHERE trial_key=%s", (trial_key,))
+    user = cur.fetchone()
+    cur.close()
     conn.close()
 
     if not user:
@@ -109,12 +117,14 @@ def _validate_trial_key(trial_key: str) -> str:
 
 def _log_trial_usage(trial_key: str, action: str = "upload"):
     conn = get_db()
+    cur = get_cur(conn)
     field = "uploads_count" if action == "upload" else "chat_count"
-    conn.execute(
-        f"UPDATE trial_users SET {field}={field}+1, last_used_at=? WHERE trial_key=?",
+    cur.execute(
+        f"UPDATE trial_users SET {field}={field}+1, last_used_at=%s WHERE trial_key=%s",
         (datetime.now().isoformat(), trial_key),
     )
     conn.commit()
+    cur.close()
     conn.close()
 
 # ── Text extraction ───────────────────────────────────────────────────────────
@@ -334,11 +344,13 @@ async def upload_contract(
 
     # Save to DB
     conn = get_db()
-    conn.execute(
-        "INSERT INTO contracts (id, filename, uploaded_at, file_size, status, raw_text) VALUES (?,?,?,?,?,?)",
+    cur = get_cur(conn)
+    cur.execute(
+        "INSERT INTO contracts (id, filename, uploaded_at, file_size, status, raw_text) VALUES (%s,%s,%s,%s,%s,%s)",
         (contract_id, file.filename, datetime.now().isoformat(), len(content), "pending", raw_text),
     )
     conn.commit()
+    cur.close()
     conn.close()
 
     # Resolve API key — support both Anthropic keys and LexAI trial keys
@@ -354,25 +366,31 @@ async def upload_contract(
         try:
             analysis = analyze_contract(raw_text, resolved_key, jurisdiction)
             conn = get_db()
-            conn.execute(
-                "UPDATE contracts SET status=?, analysis=? WHERE id=?",
+            cur = get_cur(conn)
+            cur.execute(
+                "UPDATE contracts SET status=%s, analysis=%s WHERE id=%s",
                 ("analyzed", json.dumps(analysis, ensure_ascii=False), contract_id),
             )
             conn.commit()
+            cur.close()
             conn.close()
             return {"id": contract_id, "status": "analyzed", "analysis": analysis}
         except json.JSONDecodeError as e:
             conn = get_db()
-            conn.execute("UPDATE contracts SET status='error' WHERE id=?", (contract_id,))
+            cur = get_cur(conn)
+            cur.execute("UPDATE contracts SET status='error' WHERE id=%s", (contract_id,))
             conn.commit()
+            cur.close()
             conn.close()
             raise HTTPException(500, f"La IA devolvió un formato inesperado: {e}")
         except anthropic.AuthenticationError:
             raise HTTPException(401, "API Key de Anthropic inválida. Compruébala en Configuración.")
         except Exception as e:
             conn = get_db()
-            conn.execute("UPDATE contracts SET status='error' WHERE id=?", (contract_id,))
+            cur = get_cur(conn)
+            cur.execute("UPDATE contracts SET status='error' WHERE id=%s", (contract_id,))
             conn.commit()
+            cur.close()
             conn.close()
             raise HTTPException(500, f"Error en análisis IA: {e}")
 
@@ -382,9 +400,10 @@ async def upload_contract(
 @app.get("/api/contracts")
 def list_contracts():
     conn = get_db()
-    rows = conn.execute(
-        "SELECT id, filename, uploaded_at, file_size, status, analysis FROM contracts ORDER BY uploaded_at DESC"
-    ).fetchall()
+    cur = get_cur(conn)
+    cur.execute("SELECT id, filename, uploaded_at, file_size, status, analysis FROM contracts ORDER BY uploaded_at DESC")
+    rows = cur.fetchall()
+    cur.close()
     conn.close()
 
     result = []
@@ -409,7 +428,10 @@ def list_contracts():
 @app.get("/api/contracts/{contract_id}")
 def get_contract(contract_id: str):
     conn = get_db()
-    row = conn.execute("SELECT * FROM contracts WHERE id=?", (contract_id,)).fetchone()
+    cur = get_cur(conn)
+    cur.execute("SELECT * FROM contracts WHERE id=%s", (contract_id,))
+    row = cur.fetchone()
+    cur.close()
     conn.close()
 
     if not row:
@@ -428,12 +450,16 @@ def get_contract(contract_id: str):
 @app.delete("/api/contracts/{contract_id}")
 def delete_contract(contract_id: str):
     conn = get_db()
-    row = conn.execute("SELECT id FROM contracts WHERE id=?", (contract_id,)).fetchone()
+    cur = get_cur(conn)
+    cur.execute("SELECT id FROM contracts WHERE id=%s", (contract_id,))
+    row = cur.fetchone()
     if not row:
+        cur.close()
         conn.close()
         raise HTTPException(404, "Contrato no encontrado")
-    conn.execute("DELETE FROM contracts WHERE id=?", (contract_id,))
+    cur.execute("DELETE FROM contracts WHERE id=%s", (contract_id,))
     conn.commit()
+    cur.close()
     conn.close()
     # Remove uploaded file
     for ext in (".pdf", ".docx"):
@@ -449,7 +475,10 @@ def reanalyze_contract(contract_id: str, payload: dict):
         raise HTTPException(400, "Se requiere API Key para re-analizar")
 
     conn = get_db()
-    row = conn.execute("SELECT raw_text FROM contracts WHERE id=?", (contract_id,)).fetchone()
+    cur = get_cur(conn)
+    cur.execute("SELECT raw_text FROM contracts WHERE id=%s", (contract_id,))
+    row = cur.fetchone()
+    cur.close()
     conn.close()
 
     if not row:
@@ -458,11 +487,13 @@ def reanalyze_contract(contract_id: str, payload: dict):
     try:
         analysis = analyze_contract(row["raw_text"], api_key.strip())
         conn = get_db()
-        conn.execute(
-            "UPDATE contracts SET status=?, analysis=? WHERE id=?",
+        cur = get_cur(conn)
+        cur.execute(
+            "UPDATE contracts SET status=%s, analysis=%s WHERE id=%s",
             ("analyzed", json.dumps(analysis, ensure_ascii=False), contract_id),
         )
         conn.commit()
+        cur.close()
         conn.close()
         return {"id": contract_id, "status": "analyzed", "analysis": analysis}
     except anthropic.AuthenticationError:
@@ -532,7 +563,10 @@ def chat_with_contract(contract_id: str, payload: dict):
         resolved_key = raw_key
 
     conn = get_db()
-    row = conn.execute("SELECT raw_text, analysis FROM contracts WHERE id=?", (contract_id,)).fetchone()
+    cur = get_cur(conn)
+    cur.execute("SELECT raw_text, analysis FROM contracts WHERE id=%s", (contract_id,))
+    row = cur.fetchone()
+    cur.close()
     conn.close()
 
     if not row:
@@ -598,8 +632,11 @@ def create_trial(payload: dict):
 
     # Check duplicate email
     conn = get_db()
-    existing = conn.execute("SELECT trial_key FROM trial_users WHERE email=?", (email,)).fetchone()
+    cur = get_cur(conn)
+    cur.execute("SELECT trial_key FROM trial_users WHERE email=%s", (email,))
+    existing = cur.fetchone()
     if existing:
+        cur.close()
         conn.close()
         raise HTTPException(409, f"Ya existe un trial para {email}: {existing['trial_key']}")
 
@@ -608,14 +645,15 @@ def create_trial(payload: dict):
     created_at = datetime.now()
     expires_at = created_at + timedelta(days=days)
 
-    conn.execute(
+    cur.execute(
         """INSERT INTO trial_users
            (id, name, email, trial_key, created_at, expires_at, is_active, notes)
-           VALUES (?,?,?,?,?,?,1,?)""",
+           VALUES (%s,%s,%s,%s,%s,%s,1,%s)""",
         (user_id, name, email, trial_key,
          created_at.isoformat(), expires_at.isoformat(), notes),
     )
     conn.commit()
+    cur.close()
     conn.close()
 
     return {
@@ -632,9 +670,10 @@ def create_trial(payload: dict):
 def list_trial_users(admin_secret: str = ""):
     _check_admin(admin_secret)
     conn = get_db()
-    rows = conn.execute(
-        "SELECT * FROM trial_users ORDER BY created_at DESC"
-    ).fetchall()
+    cur = get_cur(conn)
+    cur.execute("SELECT * FROM trial_users ORDER BY created_at DESC")
+    rows = cur.fetchall()
+    cur.close()
     conn.close()
 
     result = []
@@ -660,8 +699,10 @@ def list_trial_users(admin_secret: str = ""):
 def deactivate_trial(email: str, payload: dict):
     _check_admin(payload.get("admin_secret", ""))
     conn = get_db()
-    conn.execute("UPDATE trial_users SET is_active=0 WHERE email=?", (email,))
+    cur = get_cur(conn)
+    cur.execute("UPDATE trial_users SET is_active=0 WHERE email=%s", (email,))
     conn.commit()
+    cur.close()
     conn.close()
     return {"message": f"Trial de {email} desactivado"}
 
@@ -671,18 +712,22 @@ def extend_trial(email: str, payload: dict):
     _check_admin(payload.get("admin_secret", ""))
     extra_days = int(payload.get("days", 7))
     conn = get_db()
-    user = conn.execute("SELECT expires_at FROM trial_users WHERE email=?", (email,)).fetchone()
+    cur = get_cur(conn)
+    cur.execute("SELECT expires_at FROM trial_users WHERE email=%s", (email,))
+    user = cur.fetchone()
     if not user:
+        cur.close()
         conn.close()
         raise HTTPException(404, f"Usuario {email} no encontrado")
     current_expiry = datetime.fromisoformat(user["expires_at"])
     base = max(current_expiry, datetime.now())
     new_expiry = base + timedelta(days=extra_days)
-    conn.execute(
-        "UPDATE trial_users SET expires_at=?, is_active=1 WHERE email=?",
+    cur.execute(
+        "UPDATE trial_users SET expires_at=%s, is_active=1 WHERE email=%s",
         (new_expiry.isoformat(), email),
     )
     conn.commit()
+    cur.close()
     conn.close()
     return {"message": f"Trial de {email} extendido hasta {new_expiry.strftime('%Y-%m-%d')}"}
 
